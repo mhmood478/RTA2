@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Specialty Monthly Rota Editor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --input-bg: #334155;
+            --accent: #2563eb;
+            --accent-green: #10b981;
+            --text: #f8fafc;
+            --border: #475569;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        header h1 { font-size: 2rem; font-weight: 800; }
+        header p { color: #94a3b8; font-size: 0.95rem; margin-top: 0.25rem; }
+
+        .control-panel {
+            background: var(--panel);
+            padding: 1.5rem;
+            border-radius: 14px;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .control-group {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        select, input[type="month"] {
+            background: var(--input-bg);
+            color: white;
+            border: 1px solid var(--border);
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.75rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-save { background: var(--accent-green); }
+
+        /* TABLE */
+        .table-container {
+            background: var(--panel);
+            border-radius: 14px;
+            overflow-x: auto;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 1rem;
+            border-bottom: 1px solid #334155;
+        }
+
+        th {
+            background: #0f172a;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        input[type="text"], input[type="tel"] {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+
+        input:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--accent-green);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 700;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Monthly Duty Rota Manager</h1>
+        <p>Select your department, choose the month, fill in the schedule, and click Save.</p>
+    </header>
+
+    <div class="control-panel">
+        <div class="control-group">
+            <select id="specialty-select">
+                <option value="medicine">Medicine</option>
+                <option value="surgery">Surgery</option>
+                <option value="paediatrics">Paediatrics</option>
+                <option value="gynaecology">Gynaecology</option>
+                <option value="ophthalmology">Ophthalmology</option>
+                <option value="ent">ENT</option>
+                <option value="dental">Dental</option>
+                <option value="nephrology">Nephrology</option>
+                <option value="psychiatry">Psychiatry</option>
+            </select>
+            <input type="month" id="month-select">
+            <button class="btn" id="btn-load">Load Month</button>
+        </div>
+        <button class="btn btn-save" id="btn-save">💾 Save Full Month Rota</button>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 120px;">Date</th>
+                    <th style="width: 100px;">Day</th>
+                    <th>1st On-Call Name</th>
+                    <th>1st On-Call Phone</th>
+                    <th>2nd On-Call Name</th>
+                </tr>
+            </thead>
+            <tbody id="rota-rows">
+                <!-- Days populated dynamically -->
+            </tbody>
+        </table>
+    </div>
+
+    <div class="toast" id="toast">✅ Monthly Rota Saved Successfully!</div>
+
+    <script type="module">
+        import { db } from './firebase-config.js';
+        import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Set Default Month to Current Month
+        const now = new Date();
+        const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        document.getElementById('month-select').value = currentMonthStr;
+
+        const specSelect = document.getElementById('specialty-select');
+        const monthSelect = document.getElementById('month-select');
+        const tableBody = document.getElementById('rota-rows');
+
+        async function loadMonthGrid() {
+            const specId = specSelect.value;
+            const [year, month] = monthSelect.value.split('-').map(Number);
+            const daysInMonth = new Date(year, month, 0).getDate();
+
+            tableBody.innerHTML = '';
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dateObj = new Date(year, month - 1, day);
+                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+
+                // Fetch Existing Record if present
+                const docRef = doc(db, 'rotas', specId, 'dates', dateStr);
+                const docSnap = await getDoc(docRef);
+                
+                let doc1Name = '', doc1Phone = '', doc2Name = '';
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    doc1Name = data.firstCallName || '';
+                    doc1Phone = data.firstCallPhone || '';
+                    doc2Name = data.secondCallName || '';
+                }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${dateStr}</strong></td>
+                    <td style="color: #94a3b8;">${dayName}</td>
+                    <td><input type="text" data-date="${dateStr}" class="first-name" value="${doc1Name}" placeholder="Dr. Name"></td>
+                    <td><input type="tel" data-date="${dateStr}" class="first-phone" value="${doc1Phone}" placeholder="Phone No."></td>
+                    <td><input type="text" data-date="${dateStr}" class="second-name" value="${doc2Name}" placeholder="Dr. Name"></td>
+                `;
+                tableBody.appendChild(row);
+            }
+        }
+
+        async function saveMonthGrid() {
+            const specId = specSelect.value;
+            const rows = tableBody.querySelectorAll('tr');
+
+            for (const row of rows) {
+                const firstInput = row.querySelector('.first-name');
+                const dateStr = firstInput.dataset.date;
+                const firstCallName = firstInput.value.trim();
+                const firstCallPhone = row.querySelector('.first-phone').value.trim();
+                const secondCallName = row.querySelector('.second-name').value.trim();
+
+                const docRef = doc(db, 'rotas', specId, 'dates', dateStr);
+                await setDoc(docRef, {
+                    firstCallName,
+                    firstCallPhone,
+                    secondCallName,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+            }
+
+            // Show Toast
+            const toast = document.getElementById('toast');
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        document.getElementById('btn-load').addEventListener('click', loadMonthGrid);
+        document.getElementById('btn-save').addEventListener('click', saveMonthGrid);
+
+        // Initial Load
+        loadMonthGrid();
+    </script>
+</body>
+</html>
