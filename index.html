@@ -1,54 +1,401 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Emergency Department on-call board</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared.css">
-<style>
-.wrap{max-width:980px; margin:0 auto; padding:2.2rem 1.2rem 3rem}
-h1{margin:0 0 .4rem; font-size:2.2rem; font-weight:800; letter-spacing:-.02em}
-.lead{margin:0 0 1.6rem; color:var(--muted); font-size:1.05rem; line-height:1.55; max-width:60ch}
-.hero{display:flex; gap:.8rem; flex-wrap:wrap; margin-bottom:2.2rem}
-h2{font-size:1.2rem; margin:0 0 .3rem}
-.sub{margin:0 0 1rem; color:var(--muted); line-height:1.5}
-.list{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:.8rem}
-.item{--c:#4f8cff; display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.9rem 1rem .9rem 1.1rem;
-  border-radius:16px; background:var(--panel); border:1px solid var(--line); border-left:6px solid var(--c)}
-.item b{font-size:1.05rem}
-.acts{display:flex; gap:.4rem}
-.acts .btn{padding:.45rem .8rem; font-size:.9rem}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ED Live On-Call Display</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #090d16;
+            --card-bg: rgba(23, 31, 51, 0.75);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --accent-green: #10b981;
+            --accent-blue: #3b82f6;
+            --accent-gold: #f59e0b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --badge-bg: rgba(59, 130, 246, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(30, 58, 138, 0.25) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.8) 0px, transparent 50%);
+            color: var(--text-primary);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(12px);
+            padding: 0.85rem 1.75rem;
+            border-radius: 16px;
+            margin-bottom: 1.25rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+        }
+
+        .brand-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: white;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+        }
+
+        .brand-text h1 {
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-text p {
+            font-size: 0.8rem;
+            color: var(--accent-green);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: pulse 1.8s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .time-box {
+            text-align: right;
+        }
+
+        .time-box .date {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .time-box .clock {
+            font-size: 1.85rem;
+            font-weight: 800;
+            color: #ffffff;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+
+        /* 3x3 GRID MATRIX */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 1rem;
+            flex: 1;
+            height: calc(100% - 90px);
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 1.1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--accent-blue);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding-bottom: 0.65rem;
+        }
+
+        .spec-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #ffffff;
+        }
+
+        .spec-icon {
+            font-size: 1.25rem;
+            opacity: 0.8;
+        }
+
+        .call-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+            margin-top: 0.5rem;
+        }
+
+        /* 1st ON CALL */
+        .first-call {
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            padding: 0.75rem 0.9rem;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .doctor-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow: hidden;
+        }
+
+        .role-label {
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--accent-blue);
+        }
+
+        .doc-name {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .phone-badge {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 1.05rem;
+            padding: 0.5rem 0.85rem;
+            border-radius: 10px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            white-space: nowrap;
+            letter-spacing: 0.03em;
+        }
+
+        /* 2nd ON CALL */
+        .second-call {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            padding: 0.5rem 0.9rem;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .second-call .role-label {
+            color: var(--accent-gold);
+        }
+
+        .second-call .doc-name {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .empty-state {
+            color: #64748b;
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+    </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Emergency Department on-call board</h1>
-  <p class="lead">See who is on call today across all specialties, and let each specialty keep its own monthly rota up to date.</p>
-  <div class="hero">
-    <a class="btn primary" href="display.html">Open TV display</a>
-    <a class="btn" href="edit.html">Edit a rota</a>
-  </div>
-  <h2>Rota links for specialties</h2>
-  <p class="sub">Send each specialty its own link. Anyone with the link can edit that specialty’s rota.</p>
-  <div class="list" id="list"></div>
-</div>
-<script src="shared.js"></script>
-<script>
-document.getElementById('list').innerHTML = SPECIALTIES.map(function (s) {
-  return '<div class="item" style="--c:' + s.color + '"><b>' + esc(s.name) + '</b><div class="acts">' +
-    '<a class="btn" href="edit.html?s=' + s.id + '">Open</a>' +
-    '<button class="btn" data-id="' + s.id + '">Copy link</button></div></div>';
-}).join('');
-document.getElementById('list').addEventListener('click', function (ev) {
-  var b = ev.target.closest('button[data-id]'); if (!b) return;
-  var url = new URL('edit.html?s=' + b.getAttribute('data-id'), location.href).href;
-  function done() { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy link'; }, 1500); }
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { prompt('Copy this link:', url); });
-  else prompt('Copy this link:', url);
-});
-</script>
+
+    <!-- HEADER -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">+</div>
+            <div class="brand-text">
+                <h1>Emergency Department</h1>
+                <p><span class="live-dot"></span> LIVE ON-CALL ROSTER</p>
+            </div>
+        </div>
+        <div class="time-box">
+            <div class="date" id="current-date">Loading date...</div>
+            <div class="clock" id="current-time">00:00:00</div>
+        </div>
+    </header>
+
+    <!-- 3x3 DISPLAY MATRIX -->
+    <div class="grid-container" id="cards-matrix">
+        <!-- 9 Specialty Cards Rendered Dynamically -->
+    </div>
+
+    <!-- FIREBASE INITIALIZATION & LOGIC -->
+    <script type="module">
+        import { db } from './firebase-config.js';
+        import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const specialties = [
+            { id: 'medicine', name: 'Medicine', icon: '🩺' },
+            { id: 'surgery', name: 'Surgery', icon: '🔪' },
+            { id: 'paediatrics', name: 'Paediatrics', icon: '👶' },
+            { id: 'gynaecology', name: 'Gynaecology', icon: '🤰' },
+            { id: 'ophthalmology', name: 'Ophthalmology', icon: '👁️' },
+            { id: 'ent', name: 'ENT', icon: '👂' },
+            { id: 'dental', name: 'Dental', icon: '🦷' },
+            { id: 'nephrology', name: 'Nephrology', icon: '🫘' },
+            { id: 'psychiatry', name: 'Psychiatry', icon: '🧠' }
+        ];
+
+        // RENDER CARDS SHELL
+        const container = document.getElementById('cards-matrix');
+        container.innerHTML = specialties.map(spec => `
+            <div class="card" id="card-${spec.id}">
+                <div class="card-header">
+                    <span class="spec-title">${spec.name}</span>
+                    <span class="spec-icon">${spec.icon}</span>
+                </div>
+                <div class="call-section">
+                    <div class="first-call">
+                        <div class="doctor-info">
+                            <span class="role-label">1st On-Call</span>
+                            <span class="doc-name" id="doc1-${spec.id}"><span class="empty-state">Not Assigned</span></span>
+                        </div>
+                        <div id="phone1-${spec.id}"></div>
+                    </div>
+                    <div class="second-call">
+                        <div class="doctor-info">
+                            <span class="role-label">2nd On-Call</span>
+                            <span class="doc-name" id="doc2-${spec.id}"><span class="empty-state">Not Assigned</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        // REAL-TIME FIRESTORE LISTENER
+        function getFormattedToday() {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        function listenToRoster() {
+            const dateStr = getFormattedToday();
+
+            specialties.forEach(spec => {
+                // Firestore Document Path: rotas/{specialtyId}/dates/{YYYY-MM-DD}
+                const docRef = doc(db, 'rotas', spec.id, 'dates', dateStr);
+
+                onSnapshot(docRef, (docSnap) => {
+                    const doc1El = document.getElementById(`doc1-${spec.id}`);
+                    const doc2El = document.getElementById(`doc2-${spec.id}`);
+                    const phone1El = document.getElementById(`phone1-${spec.id}`);
+
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+
+                        doc1El.innerHTML = data.firstCallName || `<span class="empty-state">Not Assigned</span>`;
+                        doc2El.innerHTML = data.secondCallName || `<span class="empty-state">Not Assigned</span>`;
+
+                        if (data.firstCallPhone) {
+                            phone1El.innerHTML = `<a href="tel:${data.firstCallPhone}" class="phone-badge">📞 ${data.firstCallPhone}</a>`;
+                        } else {
+                            phone1El.innerHTML = '';
+                        }
+                    } else {
+                        doc1El.innerHTML = `<span class="empty-state">Not Assigned</span>`;
+                        doc2El.innerHTML = `<span class="empty-state">Not Assigned</span>`;
+                        phone1El.innerHTML = '';
+                    }
+                });
+            });
+        }
+
+        // CLOCK & DATE UPDATE
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('en-US', { hour12: false });
+            document.getElementById('current-date').textContent = now.toLocaleDateString('en-US', { 
+                weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' 
+            });
+        }
+
+        setInterval(updateClock, 1000);
+        updateClock();
+        listenToRoster();
+
+        // Midnight Auto-Refresh Listener
+        setInterval(() => {
+            const now = new Date();
+            if (now.getHours() === 0 && now.getMinutes() === 0 && now.getSeconds() < 2) {
+                listenToRoster();
+            }
+        }, 1000);
+    </script>
 </body>
 </html>
