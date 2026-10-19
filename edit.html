@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edit on-call rota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+.wrap{max-width:900px; margin:0 auto; padding:1.2rem 1rem 7rem}
+.head{display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1rem}
+.head h1{margin:0; font-size:1.7rem; font-weight:800; color:var(--c,#fff)}
+.head p{margin:.2rem 0 0; color:var(--muted); font-size:.95rem}
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:1rem}
+.tabs{display:inline-flex; padding:4px; border-radius:14px; background:#0b1626; border:1px solid var(--line); margin-bottom:1rem}
+.tabs button{border:0; background:none; color:var(--muted); font:inherit; font-weight:700; padding:.55rem 1.2rem; border-radius:10px; cursor:pointer}
+.tabs button.on{background:var(--c,#4f8cff); color:#04101c}
+.month{display:flex; align-items:center; gap:.6rem; margin-bottom:.9rem; flex-wrap:wrap}
+.month h2{margin:0; font-size:1.25rem; min-width:9.5rem; text-align:center}
+.cols,.day{display:grid; grid-template-columns:4.2rem 1fr 1fr; gap:.55rem; align-items:center}
+.cols{padding:0 .5rem .4rem; color:var(--muted); font-size:.85rem; font-weight:600}
+.day{padding:.35rem .5rem; border-radius:12px}
+.day:nth-child(even){background:rgba(255,255,255,.025)}
+.day.wk{background:rgba(255,181,71,.07)}
+.day.today{outline:2px solid var(--c,#4f8cff); background:rgba(79,140,255,.1)}
+.day.same{outline:2px solid var(--bad)}
+.dl{display:flex; flex-direction:column; line-height:1.15}
+.dl b{font-size:1.15rem}
+.dl span{font-size:.78rem; color:var(--muted)}
+.hint{margin:.2rem 0 .9rem; color:var(--muted); font-size:.92rem; line-height:1.5}
+.drow{display:grid; grid-template-columns:1.4fr 1fr auto; gap:.5rem; margin-bottom:.5rem}
+.drow .btn{padding:.5rem .8rem; color:var(--bad)}
+.field{margin-bottom:1.1rem; max-width:340px}
+.field label{display:block; margin-bottom:.35rem; font-weight:600; font-size:.92rem}
+.bar{position:fixed; left:0; right:0; bottom:0; padding:.8rem 1rem; background:rgba(8,18,30,.92); backdrop-filter:blur(8px);
+  border-top:1px solid var(--line); display:flex; justify-content:center; align-items:center; gap:1rem}
+.bar span{color:var(--muted); font-size:.95rem}
+.bar span.ok{color:var(--live)} .bar span.err{color:var(--bad)} .bar span.warn{color:var(--warn)}
+.picker{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:.8rem}
+.pick{display:block; text-decoration:none; padding:1.1rem 1.2rem; border-radius:16px; background:var(--panel);
+  border:1px solid var(--line); border-left:6px solid var(--c); font-weight:800; font-size:1.1rem}
+.pick:hover{background:var(--panel2)}
+@media(max-width:520px){.drow{grid-template-columns:1fr 1fr} .drow .btn{grid-column:1/-1} .cols,.day{grid-template-columns:3.4rem 1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="shared.js"></script>
+<script>
+(function () {
+  var root = document.getElementById('app');
+  var db = initFirebase();
+  var sid = new URLSearchParams(location.search).get('s');
+  var sp = SPECIALTIES.filter(function (s) { return s.id === sid; })[0];
+  var DAYN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  if (!db) { root.innerHTML = setupMessage(); return; }
+  if (!sp) {
+    root.innerHTML = '<div class="head"><div><h1>Edit on-call rota</h1><p>Choose your specialty.</p></div>' +
+      '<a class="btn" href="display.html">View display screen</a></div><div class="picker">' +
+      SPECIALTIES.map(function (s) {
+        return '<a class="pick" style="--c:' + s.color + '" href="edit.html?s=' + s.id + '">' + esc(s.name) + '</a>';
+      }).join('') + '</div>';
+    return;
+  }
+
+  document.title = sp.name + ' on-call rota';
+  document.documentElement.style.setProperty('--c', sp.color);
+  var ref = db.collection('specialties').doc(sp.id);
+  var state = { doctors: [], duty: '', rota: {} };
+  var dirty = {};          // date keys changed since last save
+  var changed = false;
+  var tab = 'rota';
+  var t0 = parseYmd(dutyDate());
+  var cur = new Date(t0.getFullYear(), t0.getMonth(), 1);
+
+  function uid() { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function setStatus(text, cls) { var el = document.getElementById('msg'); if (el) { el.textContent = text; el.className = cls || ''; } }
+  function markChanged() { changed = true; setStatus('Unsaved changes', 'warn'); }
+
+  root.innerHTML = '<div class="head"><div><h1>' + esc(sp.name) + ' on-call rota</h1>' +
+    '<p>Add your doctors once, then choose who is on call each day.</p></div>' +
+    '<a class="btn" href="display.html">View display screen</a></div>' +
+    '<div class="tabs"><button id="tRota" class="on">Rota</button><button id="tDocs">Doctors</button></div>' +
+    '<div class="panel" id="pRota"></div><div class="panel" id="pDocs" hidden></div>' +
+    '<div class="bar"><span id="msg">Loading…</span><button class="btn primary" id="save" disabled>Save changes</button></div>';
+
+  var pRota = document.getElementById('pRota'), pDocs = document.getElementById('pDocs'), saveBtn = document.getElementById('save');
+
+  function opts(selected) {
+    var h = '<option value="">—</option>', found = !selected;
+    state.doctors.forEach(function (d) {
+      if (!d.name.trim()) return;
+      if (d.id === selected) found = true;
+      h += '<option value="' + esc(d.id) + '"' + (d.id === selected ? ' selected' : '') + '>' + esc(d.name) + '</option>';
+    });
+    if (!found) h += '<option value="' + esc(selected) + '" selected>(removed doctor)</option>';
+    return h;
+  }
+  function renderRota() {
+    var y = cur.getFullYear(), m = cur.getMonth(), n = new Date(y, m + 1, 0).getDate(), today = dutyDate();
+    var h = '<div class="month"><button class="btn" id="prev" aria-label="Previous month">‹</button>' +
+      '<h2>' + MONTHS[m] + ' ' + y + '</h2><button class="btn" id="next" aria-label="Next month">›</button>' +
+      '<button class="btn" id="now">Today</button></div>';
+    if (!state.doctors.some(function (d) { return d.name.trim(); })) {
+      h += '<p class="hint">No doctors yet. Open the <b>Doctors</b> tab and add your doctors first.</p>';
+    }
+    h += '<div class="cols"><span>Day</span><span>1st on call</span><span>2nd on call</span></div>';
+    for (var d = 1; d <= n; d++) {
+      var dt = new Date(y, m, d), k = ymd(dt), e = state.rota[k] || {}, wd = dt.getDay();
+      h += '<div class="day' + (k === today ? ' today' : '') + ((wd === 5 || wd === 6) ? ' wk' : '') +
+        ((e.first && e.first === e.second) ? ' same' : '') + '" data-k="' + k + '">' +
+        '<div class="dl"><b>' + d + '</b><span>' + DAYN[wd] + '</span></div>' +
+        '<select data-w="first" aria-label="1st on call, ' + d + ' ' + MONTHS[m] + '">' + opts(e.first) + '</select>' +
+        '<select data-w="second" aria-label="2nd on call, ' + d + ' ' + MONTHS[m] + '">' + opts(e.second) + '</select></div>';
+    }
+    pRota.innerHTML = h;
+  }
+  function renderDocs() {
+    var h = '<div class="field"><label for="duty">Duty number of the specialty (optional)</label>' +
+      '<input id="duty" inputmode="tel" placeholder="e.g. 1234" value="' + esc(state.duty) + '"></div>' +
+      '<p class="hint">Doctors listed here appear in the rota drop-downs. The phone number is shown on the display screen.</p>';
+    state.doctors.forEach(function (d, i) {
+      h += '<div class="drow" data-i="' + i + '"><input data-f="name" placeholder="Doctor name" aria-label="Doctor name" value="' + esc(d.name) + '">' +
+        '<input data-f="phone" type="tel" placeholder="Phone number" aria-label="Phone number" value="' + esc(d.phone) + '">' +
+        '<button class="btn" data-del="' + i + '">Remove</button></div>';
+    });
+    h += '<button class="btn" id="add">Add doctor</button>';
+    pDocs.innerHTML = h;
+  }
+  function show(t) {
+    tab = t;
+    document.getElementById('tRota').className = t === 'rota' ? 'on' : '';
+    document.getElementById('tDocs').className = t === 'docs' ? 'on' : '';
+    pRota.hidden = t !== 'rota'; pDocs.hidden = t !== 'docs';
+    if (t === 'rota') renderRota(); else renderDocs();
+  }
+
+  document.getElementById('tRota').onclick = function () { show('rota'); };
+  document.getElementById('tDocs').onclick = function () { show('docs'); };
+
+  pRota.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    if (b.id === 'prev') cur = new Date(cur.getFullYear(), cur.getMonth() - 1, 1);
+    else if (b.id === 'next') cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    else if (b.id === 'now') { var t = parseYmd(dutyDate()); cur = new Date(t.getFullYear(), t.getMonth(), 1); }
+    else return;
+    renderRota();
+  });
+  pRota.addEventListener('change', function (ev) {
+    var sel = ev.target; if (sel.tagName !== 'SELECT') return;
+    var row = sel.closest('.day'), k = row.getAttribute('data-k');
+    var e = state.rota[k] || (state.rota[k] = { first: '', second: '' });
+    e[sel.getAttribute('data-w')] = sel.value;
+    row.classList.toggle('same', !!e.first && e.first === e.second);
+    dirty[k] = true; markChanged();
+  });
+  pDocs.addEventListener('input', function (ev) {
+    var inp = ev.target;
+    if (inp.id === 'duty') { state.duty = inp.value; markChanged(); return; }
+    var row = inp.closest('.drow'); if (!row) return;
+    state.doctors[+row.getAttribute('data-i')][inp.getAttribute('data-f')] = inp.value; markChanged();
+  });
+  pDocs.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    if (b.id === 'add') {
+      state.doctors.push({ id: uid(), name: '', phone: '' }); renderDocs();
+      var ins = pDocs.querySelectorAll('.drow input[data-f="name"]'); ins[ins.length - 1].focus(); markChanged();
+    } else if (b.hasAttribute('data-del')) {
+      var i = +b.getAttribute('data-del');
+      if (confirm('Remove ' + (state.doctors[i].name || 'this doctor') + '? Days where they are chosen will show "(removed doctor)".')) {
+        state.doctors.splice(i, 1); renderDocs(); markChanged();
+      }
+    }
+  });
+
+  saveBtn.onclick = function () {
+    saveBtn.disabled = true; setStatus('Saving…', '');
+    state.doctors = state.doctors.filter(function (d) { return d.name.trim(); })
+      .map(function (d) { return { id: d.id, name: d.name.trim(), phone: d.phone.trim() }; });
+    var upd = {};
+    Object.keys(dirty).forEach(function (k) {
+      var e = state.rota[k];
+      if (e && (e.first || e.second)) upd[k] = { first: e.first || '', second: e.second || '' };
+      else { upd[k] = firebase.firestore.FieldValue.delete(); delete state.rota[k]; }
+    });
+    ref.set({ name: sp.name, duty: state.duty.trim(), doctors: state.doctors, rota: upd }, { merge: true })
+      .then(function () {
+        dirty = {}; changed = false; setStatus('Saved. The display screen is updated.', 'ok');
+        if (tab === 'docs') renderDocs(); else renderRota();
+      })
+      .catch(function (err) { setStatus('Could not save: ' + (err && err.message ? err.message : 'check your connection and try again'), 'err'); })
+      .then(function () { saveBtn.disabled = false; });
+  };
+  window.addEventListener('beforeunload', function (ev) { if (changed) { ev.preventDefault(); ev.returnValue = ''; } });
+
+  ref.get().then(function (snap) {
+    var d = snap.exists ? snap.data() : {};
+    state.doctors = (d.doctors || []).map(function (x) { return { id: x.id, name: x.name || '', phone: x.phone || '' }; });
+    state.duty = d.duty || '';
+    state.rota = d.rota || {};
+    saveBtn.disabled = false; setStatus('', '');
+    show(state.doctors.length ? 'rota' : 'docs');
+  }).catch(function (err) {
+    setStatus('Could not load: ' + (err && err.message ? err.message : 'check your connection and reload'), 'err');
+  });
+})();
+</script>
+</body>
+</html>

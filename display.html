@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>On-call today – Emergency Department</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+body{height:100vh; overflow:hidden; display:flex; flex-direction:column; --u:min(1vh,.56vw)}
+.top{display:flex; align-items:center; justify-content:space-between; gap:calc(2*var(--u));
+  padding:calc(1.5*var(--u)) calc(2.4*var(--u)) calc(1.1*var(--u))}
+.top h1{margin:0; font-size:calc(3.3*var(--u)); font-weight:800; letter-spacing:-.01em; line-height:1.1}
+.top .sub{margin-top:calc(.5*var(--u)); font-size:calc(1.9*var(--u)); color:var(--muted)}
+.right{display:flex; align-items:center; gap:calc(2.4*var(--u))}
+.status{display:flex; align-items:center; gap:calc(.8*var(--u)); font-size:calc(1.6*var(--u)); color:var(--muted)}
+.dot{width:calc(1.2*var(--u)); height:calc(1.2*var(--u)); border-radius:50%; background:var(--live); box-shadow:0 0 0 calc(.4*var(--u)) rgba(61,220,151,.18)}
+.status.off .dot{background:var(--warn); box-shadow:0 0 0 calc(.4*var(--u)) rgba(255,181,71,.2)}
+.clock{font-size:calc(5.2*var(--u)); font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+.grid{flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+  gap:calc(1.2*var(--u)); padding:0 calc(2.4*var(--u)) calc(2*var(--u))}
+.card{
+  --c:#4f8cff; position:relative; min-height:0; min-width:0; overflow:hidden;
+  display:flex; flex-direction:column; justify-content:space-between; gap:calc(.6*var(--u));
+  padding:calc(1.3*var(--u)) calc(1.8*var(--u)) calc(1.3*var(--u)) calc(2.4*var(--u));
+  border-radius:calc(1.6*var(--u)); background:var(--panel); border:1px solid var(--line);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--c) 17%,var(--panel)) 0%,var(--panel) 58%);
+  border-color:color-mix(in srgb,var(--c) 38%,var(--line));
+}
+.card::before{content:""; position:absolute; left:0; top:0; bottom:0; width:calc(.8*var(--u)); background:var(--c)}
+.hd{display:flex; align-items:center; justify-content:space-between; gap:calc(1*var(--u))}
+.hd h2{margin:0; font-size:calc(3.1*var(--u)); font-weight:800; color:var(--c); line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.duty{flex:none; font-size:calc(2*var(--u)); font-weight:700; padding:calc(.4*var(--u)) calc(1.1*var(--u));
+  border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); font-variant-numeric:tabular-nums}
+.tag{display:inline-block; font-size:calc(1.6*var(--u)); font-weight:600; color:var(--muted)}
+.first .name{font-size:calc(3.5*var(--u)); font-weight:700; line-height:1.15; margin-top:calc(.2*var(--u))}
+.first .phone{font-size:calc(3.7*var(--u)); font-weight:800; color:var(--c); font-variant-numeric:tabular-nums; line-height:1.15; letter-spacing:.01em}
+.second{padding-top:calc(.9*var(--u)); border-top:1px dashed rgba(141,164,196,.35)}
+.second .line{display:flex; align-items:baseline; justify-content:space-between; gap:calc(1.4*var(--u)); margin-top:calc(.2*var(--u))}
+.second .name{font-size:calc(2.6*var(--u)); font-weight:600; color:#d3e3fb}
+.second .phone{flex:none; font-size:calc(2.6*var(--u)); font-weight:700; color:#d3e3fb; font-variant-numeric:tabular-nums}
+.name{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0}
+.empty{color:#5f7898 !important; font-weight:600 !important}
+.notice{grid-column:1/-1; grid-row:1/-1; align-self:center}
+@media (max-aspect-ratio:1/1){
+  body{height:auto; min-height:100vh; overflow:auto; --u:2vw}
+  .grid{grid-template-columns:1fr; grid-template-rows:none}
+  .card{min-height:calc(30*var(--u))}
+  .top{flex-wrap:wrap}
+  .clock{font-size:calc(6*var(--u))}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Emergency Department · On call today</h1>
+    <div class="sub" id="sub">&nbsp;</div>
+  </div>
+  <div class="right">
+    <div class="status off" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+    <div class="clock" id="clock">--:--</div>
+  </div>
+</header>
+<main class="grid" id="grid"></main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="shared.js"></script>
+<script>
+(function () {
+  var grid = document.getElementById('grid');
+  var db = initFirebase();
+  var data = {};
+  var DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  function findDoc(sd, id) {
+    var list = sd.doctors || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+  function card(sp) {
+    var sd = data[sp.id] || {};
+    var e = (sd.rota || {})[dutyDate()] || {};
+    var f = e.first ? findDoc(sd, e.first) : null;
+    var s = e.second ? findDoc(sd, e.second) : null;
+    var duty = sd.duty ? '<span class="duty">Duty ' + esc(sd.duty) + '</span>' : '';
+    var h = '<article class="card" style="--c:' + sp.color + '">';
+    h += '<div class="hd"><h2>' + esc(sp.name) + '</h2>' + duty + '</div>';
+    h += '<div class="first"><span class="tag">1st on call</span>';
+    if (f) {
+      h += '<div class="name">' + esc(f.name) + '</div><div class="phone">' + (f.phone ? esc(f.phone) : '&nbsp;') + '</div>';
+    } else {
+      h += '<div class="name empty">Not entered</div><div class="phone">&nbsp;</div>';
+    }
+    h += '</div><div class="second"><span class="tag">2nd on call</span><div class="line">';
+    if (s) {
+      h += '<div class="name">' + esc(s.name) + '</div>' + (s.phone ? '<div class="phone">' + esc(s.phone) + '</div>' : '');
+    } else {
+      h += '<div class="name empty">' + (f ? 'None listed' : 'Not entered') + '</div>';
+    }
+    h += '</div></div></article>';
+    return h;
+  }
+  function render() {
+    if (!db) { grid.innerHTML = setupMessage(); return; }
+    var key = dutyDate();
+    var d = parseYmd(key), n = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    document.getElementById('sub').textContent =
+      DAYS[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear() +
+      '  ·  duty runs from 07:00 until 07:00 ' + DAYS[n.getDay()];
+    grid.innerHTML = SPECIALTIES.map(card).join('');
+  }
+  function tick() {
+    var t = new Date();
+    document.getElementById('clock').textContent = pad(t.getHours()) + ':' + pad(t.getMinutes());
+  }
+  function setStatus(ok, text) {
+    document.getElementById('status').className = 'status' + (ok ? '' : ' off');
+    document.getElementById('statusText').textContent = text;
+  }
+
+  tick(); render();
+  setInterval(tick, 1000);
+  setInterval(render, 30000);              // picks up the 07:00 changeover
+  setTimeout(function () { location.reload(); }, 6 * 3600 * 1000); // keeps a TV browser fresh
+
+  if (db) {
+    db.collection('specialties').onSnapshot(function (snap) {
+      data = {};
+      snap.forEach(function (doc) { data[doc.id] = doc.data(); });
+      setStatus(!snap.metadata.fromCache, snap.metadata.fromCache ? 'Reconnecting…' : 'Live');
+      render();
+    }, function () { setStatus(false, 'Connection problem'); });
+  }
+})();
+</script>
+</body>
+</html>

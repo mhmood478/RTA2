@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emergency Department on-call board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+.wrap{max-width:980px; margin:0 auto; padding:2.2rem 1.2rem 3rem}
+h1{margin:0 0 .4rem; font-size:2.2rem; font-weight:800; letter-spacing:-.02em}
+.lead{margin:0 0 1.6rem; color:var(--muted); font-size:1.05rem; line-height:1.55; max-width:60ch}
+.hero{display:flex; gap:.8rem; flex-wrap:wrap; margin-bottom:2.2rem}
+h2{font-size:1.2rem; margin:0 0 .3rem}
+.sub{margin:0 0 1rem; color:var(--muted); line-height:1.5}
+.list{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:.8rem}
+.item{--c:#4f8cff; display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.9rem 1rem .9rem 1.1rem;
+  border-radius:16px; background:var(--panel); border:1px solid var(--line); border-left:6px solid var(--c)}
+.item b{font-size:1.05rem}
+.acts{display:flex; gap:.4rem}
+.acts .btn{padding:.45rem .8rem; font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Emergency Department on-call board</h1>
+  <p class="lead">See who is on call today across all specialties, and let each specialty keep its own monthly rota up to date.</p>
+  <div class="hero">
+    <a class="btn primary" href="display.html">Open TV display</a>
+    <a class="btn" href="edit.html">Edit a rota</a>
+  </div>
+  <h2>Rota links for specialties</h2>
+  <p class="sub">Send each specialty its own link. Anyone with the link can edit that specialty’s rota.</p>
+  <div class="list" id="list"></div>
+</div>
+<script src="shared.js"></script>
+<script>
+document.getElementById('list').innerHTML = SPECIALTIES.map(function (s) {
+  return '<div class="item" style="--c:' + s.color + '"><b>' + esc(s.name) + '</b><div class="acts">' +
+    '<a class="btn" href="edit.html?s=' + s.id + '">Open</a>' +
+    '<button class="btn" data-id="' + s.id + '">Copy link</button></div></div>';
+}).join('');
+document.getElementById('list').addEventListener('click', function (ev) {
+  var b = ev.target.closest('button[data-id]'); if (!b) return;
+  var url = new URL('edit.html?s=' + b.getAttribute('data-id'), location.href).href;
+  function done() { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy link'; }, 1500); }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { prompt('Copy this link:', url); });
+  else prompt('Copy this link:', url);
+});
+</script>
+</body>
+</html>
